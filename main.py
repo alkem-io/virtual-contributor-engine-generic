@@ -17,13 +17,6 @@ logger.info(f"log level {os.path.basename(__file__)}: {LOG_LEVEL}")
 
 # define variables
 user_data = {}
-user_chain = {}
-# dictionary to keep track of the locks for each user
-user_locks = {}
-# Dictionary to keep track of the tasks for each user
-user_tasks = {}
-# Lock to prevent multiple ingestions from happening at the same time
-ingestion_lock = asyncio.Lock()
 
 
 class RabbitMQ:
@@ -40,7 +33,6 @@ class RabbitMQ:
             host=self.host, login=self.login, password=self.password
         )
         self.channel = await self.connection.channel()
-        await self.channel.declare_queue(self.queue, durable=True, auto_delete=False)
 
 
 rabbitmq = RabbitMQ(
@@ -51,43 +43,21 @@ rabbitmq = RabbitMQ(
 )
 
 
-async def query(user_id, message_body, language_code):
-    async with ingestion_lock:
+async def query(user_id, message_body):
 
-        # trim the VC tag
-        message_body["question"] = clear_tags(message_body["question"])
+    # trim the VC tag
+    message_body["question"] = clear_tags(message_body["question"])
 
-        logger.info(f"Query from user {user_id}: {message_body['question']}")
+    logger.info(f"Query from user {user_id}: {message_body['question']}")
 
-        if user_id not in user_data:
-            user_data[user_id] = {}
-            user_data[user_id]["chat_history"] = ConversationBufferWindowMemory(
-                k=3, return_messages=True, output_key="answer", input_key="question"
-            )
-            reset(user_id)
+    result = await ai_adapter.invoke(message_body)
+    logger.debug(f"LLM result: {result}")
 
-        user_data[user_id]["language"] = language_code
+    response = {"question": message_body["question"], "answer": result}
 
-        logger.debug(f"language: {user_data[user_id]['language']}")
+    logger.info(response)
 
-        result = await ai_adapter.invoke(message_body)
-        logger.debug(f"LLM result: {result}")
-
-        user_data[user_id]["chat_history"].save_context(
-            {"question": message_body["question"]},
-            {"answer": result},
-        )
-        logger.debug(f"new chat history {user_data[user_id]['chat_history']}")
-        response = {"question": message_body["question"], "answer": result}
-
-        logger.info(response)
-
-        return json.dumps(response)
-
-
-def reset(user_id):
-    user_data[user_id]["chat_history"].clear()
-    return "Reset function executed"
+    return json.dumps(response)
 
 
 async def on_request(message: aio_pika.abc.AbstractIncomingMessage):
@@ -99,23 +69,8 @@ async def on_request(message: aio_pika.abc.AbstractIncomingMessage):
         user_id = body["data"]["userID"]
 
         logger.info(f"request arriving for user id: {user_id}, deciding what to do")
-
-        # If there's no lock for this user, create one
-        if user_id not in user_locks:
-            user_locks[user_id] = asyncio.Lock()
-
-        # Check if the lock is locked
-        if user_locks[user_id].locked():
-            logger.info(
-                f"existing task running for user id: {user_id}, waiting for it to finish first"
-            )
-        else:
-            logger.info(f"no task running for user id: {user_id}, let's move!")
-
         # Acquire the lock for this user
-        async with user_locks[user_id]:
-            # Process the message
-            await process_message(message)
+        await process_message(message)
 
 
 async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
@@ -124,23 +79,16 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
 
     logger.debug(body)
 
-    operation = body["pattern"]["cmd"]
-
     if user_id is None:
         response = "userID not provided"
     else:
-        if operation == "query":
-            if "question" in body["data"]:
-                logger.info(
-                    f"query time for user id: {user_id}, let's call the query() function!"
-                )
-                response = await query(user_id, body["data"], "English")
-            else:
-                response = "Query parameter(s) not provided"
-        elif operation == "reset":
-            response = reset(user_id)
+        if "question" in body["data"]:
+            logger.info(
+                f"query time for user id: {user_id}, let's call the query() function!"
+            )
+            response = await query(user_id, body["data"])
         else:
-            response = "Unknown function"
+            response = "Query parameter(s) not provided"
 
     if rabbitmq.connection and rabbitmq.channel:
         try:
