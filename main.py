@@ -5,7 +5,6 @@ import asyncio
 import os
 import aio_pika
 import aiormq
-import json
 from aio_pika import connect_robust
 from config import config, LOG_LEVEL
 from logger import setup_logger
@@ -120,7 +119,7 @@ async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
 
 
 async def main():
-    logger.info(f"main fucntion (re)starting\n")
+    logger.info("main fucntion (re)starting\n")
     # rabbitmq is an instance of the RabbitMQ class defined earlier
     await rabbitmq.connect()
 
