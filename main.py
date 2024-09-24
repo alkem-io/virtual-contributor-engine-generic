@@ -13,9 +13,6 @@ logger = setup_logger(__name__)
 
 logger.info(f"log level {os.path.basename(__file__)}: {LOG_LEVEL}")
 
-# define variables
-user_data = {}
-
 
 class RabbitMQ:
     def __init__(self, host, login, password, queue):
