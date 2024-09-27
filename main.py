@@ -55,63 +55,53 @@ async def query(user_id, message_body):
     return json.dumps(response)
 
 
-async def on_request(message: aio_pika.abc.AbstractIncomingMessage):
+async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
     async with message.process():
-        # Parse the message body as JSON
-        body = json.loads(message.body)
-
-        # Get the user ID from the message body
-        user_id = body["data"]["userID"]
+        body = json.loads(message.body.decode())
+        user_id = body["data"].get("userID")
 
         logger.info(f"request arriving for user id: {user_id}, deciding what to do")
-        # Acquire the lock for this user
-        await process_message(message)
 
-
-async def process_message(message: aio_pika.abc.AbstractIncomingMessage):
-    body = json.loads(message.body.decode())
-    user_id = body["data"].get("userID")
-
-    logger.debug(body)
-
-    if user_id is None:
-        response = "userID not provided"
-    else:
-        if "question" in body["data"]:
-            logger.info(
-                f"query time for user id: {user_id}, let's call the query() function!"
-            )
-            response = await query(user_id, body["data"])
+        if user_id is None:
+            response = "userID not provided"
         else:
-            response = "Query parameter(s) not provided"
-
-    if rabbitmq.connection and rabbitmq.channel:
-        try:
-            if rabbitmq.connection.is_closed or rabbitmq.channel.is_closed:
-                logger.error(
-                    "Connection or channel is not open. Cannot publish message."
+            if "question" in body["data"]:
+                logger.info(
+                    f"query time for user id: {user_id}, let's call the query() function!"
                 )
-                return
+                response = await query(user_id, body["data"])
+            else:
+                response = "Query parameter(s) not provided"
 
-            await rabbitmq.channel.default_exchange.publish(
-                aio_pika.Message(
-                    body=json.dumps(
-                        {"operation": "feedback", "result": response}
-                    ).encode(),
-                    correlation_id=message.correlation_id,
-                    reply_to=message.reply_to,
-                ),
-                routing_key=message.reply_to or "",
-            )
-            logger.info(f"Response sent for correlation_id: {message.correlation_id}")
-            logger.info(f"Response sent to: {message.reply_to}")
-            logger.debug(f"response: {response}")
-        except (
-            aio_pika.exceptions.AMQPError,
-            asyncio.exceptions.CancelledError,
-            aiormq.exceptions.ChannelInvalidStateError,
-        ) as e:
-            logger.error(f"Failed to publish message due to a RabbitMQ error: {e}")
+        if rabbitmq.connection and rabbitmq.channel:
+            try:
+                if rabbitmq.connection.is_closed or rabbitmq.channel.is_closed:
+                    logger.error(
+                        "Connection or channel is not open. Cannot publish message."
+                    )
+                    return
+
+                await rabbitmq.channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=json.dumps(
+                            {"operation": "feedback", "result": response}
+                        ).encode(),
+                        correlation_id=message.correlation_id,
+                        reply_to=message.reply_to,
+                    ),
+                    routing_key=message.reply_to or "",
+                )
+                logger.info(
+                    f"Response sent for correlation_id: {message.correlation_id}"
+                )
+                logger.info(f"Response sent to: {message.reply_to}")
+                logger.debug(f"response: {response}")
+            except (
+                aio_pika.exceptions.AMQPError,
+                asyncio.exceptions.CancelledError,
+                aiormq.exceptions.ChannelInvalidStateError,
+            ) as e:
+                logger.error(f"Failed to publish message due to a RabbitMQ error: {e}")
 
 
 async def main():
@@ -126,7 +116,7 @@ async def main():
         )
 
         # Start consuming messages
-        asyncio.create_task(queue.consume(on_request))
+        asyncio.create_task(queue.consume(process_message))
 
         logger.info("Waiting for RPC requests")
 
@@ -136,5 +126,4 @@ async def main():
     await stop_event.wait()
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
+asyncio.run(main())
