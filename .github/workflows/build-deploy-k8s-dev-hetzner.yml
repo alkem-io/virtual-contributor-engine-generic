@@ -20,8 +20,8 @@ jobs:
 
       - name: "Build & Push image"
         run: |
-          docker build -f Dockerfile . -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generict:${{ github.sha }} -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generict:latest
-          docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generict:${{ github.sha }}
+          docker build -f Dockerfile . -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generic:${{ github.sha }} -t ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generic:latest
+          docker push ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generic:${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -42,7 +42,7 @@ jobs:
 
       - name: Create Image Pull Secret
         run: |
-          kubectl create secret docker-registry alkemio-virtual-contributor-engine-generict-secret \
+          kubectl create secret docker-registry alkemio-virtual-contributor-engine-generic-secret \
             --docker-server=${{ secrets.REGISTRY_LOGIN_SERVER }} \
             --docker-username=${{ secrets.REGISTRY_USERNAME }} \
             --docker-password=${{ secrets.REGISTRY_PASSWORD }} \
@@ -53,6 +53,6 @@ jobs:
           manifests: |
             manifests/25-virtual-contributor-engine-generic-deployment-dev.yml
           images: |
-            ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generict:${{ github.sha }}
+            ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-virtual-contributor-engine-generic:${{ github.sha }}
           imagepullsecrets: |
-            alkemio-virtual-contributor-engine-generict-secret
+            alkemio-virtual-contributor-engine-generic-secret
