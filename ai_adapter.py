@@ -28,7 +28,7 @@ async def invoke(message):
 # translating the question to the data _base language_ should be a separate call
 # so the translation could be used for embeddings retrieval
 async def query_chain(message):
-    model = get_model(message["engine"], message["apiKey"])
+    model = get_model(message["engine"], message["externalConfig"]["apiKey"])
     question = message["question"]
 
     # # use the last N message from the history except the last one
