@@ -40,6 +40,9 @@ spec:
                 secretKeyRef:
                   name: alkemio-rabbitmq-cluster-default-user
                   key: password
+            - name: RABBITMQ_QUEUE
+              value: virtual-contributor-engine-generic
+                
             - name: LOCAL_PATH
               valueFrom:
                 configMapKeyRef:
