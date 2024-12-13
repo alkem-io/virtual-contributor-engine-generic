@@ -1,10 +1,13 @@
-from langchain_core.messages import HumanMessage, SystemMessage
-from config import config
-from langchain.prompts import ChatPromptTemplate
-from logger import setup_logger
-from utils import (
+from alkemio_virtual_contributor_engine.events.input import Input
+from alkemio_virtual_contributor_engine.events.response import Response
+from alkemio_virtual_contributor_engine.utils import (
     history_as_text,
 )
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from config import env
+from langchain.prompts import ChatPromptTemplate
+from logger import setup_logger
 from prompts import (
     condenser_system_prompt,
 )
@@ -14,26 +17,32 @@ from models import get_model
 logger = setup_logger(__name__)
 
 
-async def invoke(message):
-    logger.info(message)
+async def invoke(input: Input) -> Response:
     try:
         # important to await the result before returning
-        return await query_chain(message)
+        return await query_chain(input)
     except Exception as inst:
         logger.exception(inst)
-        return f"{message['displayName']} - the Alkemio's VirtualContributor is currently unavailable."
+        result = f"{input.display_name} - the Alkemio's VirtualContributor is currently unavailable."
+        return Response(
+            {
+                "result": result,
+                "original_result": result,
+                "sources": [],
+            }
+        )
 
 
 # how do we handle languages? not all spaces are in Dutch obviously
 # translating the question to the data _base language_ should be a separate call
 # so the translation could be used for embeddings retrieval
-async def query_chain(message):
-    model = get_model(message["engine"], message["externalConfig"]["apiKey"])
-    question = message["question"]
+async def query_chain(input: Input) -> Response:
+    model = get_model(input.engine, input.external_config["apiKey"])
+    question = input.message
 
     # # use the last N message from the history except the last one
     # # as it is the question we are answering now
-    history = message["history"][(config["history_length"] + 1) * -1 : -1]
+    history = input.history[(env.history_length + 1) * -1 : -1]
 
     # if we have history try to add context from it into the last question
     # - who is Maxima?
@@ -57,10 +66,10 @@ async def query_chain(message):
 
     messages = []
 
-    for system_message in message["prompt"]:
+    for system_message in input.prompt:
         messages.append(SystemMessage(content=system_message))
 
     messages.append(HumanMessage(content=question))
 
     response = model.invoke(messages)
-    return response.content
+    return Response({"result": response.content})

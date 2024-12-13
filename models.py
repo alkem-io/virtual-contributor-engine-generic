@@ -1,10 +1,10 @@
 from langchain_core.pydantic_v1 import SecretStr
-from config import LOG_LEVEL
+from config import env
 from langchain_openai import ChatOpenAI
 
 
 # verbose output for LLMs
-if LOG_LEVEL == "DEBUG":
+if env.log_level == "DEBUG":
     verbose_models = True
 else:
     verbose_models = False
