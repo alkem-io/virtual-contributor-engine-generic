@@ -1,4 +1,4 @@
-from langchain_core.pydantic_v1 import SecretStr
+from pydantic import SecretStr
 from config import env
 from langchain_openai import ChatOpenAI
 
@@ -18,7 +18,6 @@ def get_model(engine, api_key):
     model = model_class(
         model="gpt-4o",
         temperature=0,
-        max_tokens=None,
         timeout=None,
         max_retries=2,
         api_key=SecretStr(api_key),
