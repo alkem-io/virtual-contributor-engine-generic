@@ -1,13 +1,14 @@
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.prompts import ChatPromptTemplate
+
+from alkemio_virtual_contributor_engine.setup_logger import setup_logger
 from alkemio_virtual_contributor_engine.events.input import Input
 from alkemio_virtual_contributor_engine.events.response import Response
 from alkemio_virtual_contributor_engine.utils import (
     history_as_text,
 )
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from config import env
-from langchain.prompts import ChatPromptTemplate
-from logger import setup_logger
 from prompts import (
     condenser_system_prompt,
 )
