@@ -186,7 +186,7 @@ frozenlist = ">=1.1.0"
 
 [[package]]
 name = "alkemio-virtual-contributor-engine"
-version = "0.0.2"
+version = "0.0.3"
 description = "Alkemio's generic Virtual Contributor engine"
 optional = false
 python-versions = "^3.11"
@@ -202,7 +202,7 @@ asyncio = "3.4.3"
 type = "git"
 url = "https://git@github.com/alkem-io/virtual-contributor-engine.git"
 reference = "v0.0.3"
-resolved_reference = "ce0bb792ba5ac13cc1cca50cac1fde007babe65f"
+resolved_reference = "17322cdda73e4ab101372c7a11c072e49517e0fe"
 
 [[package]]
 name = "annotated-types"
