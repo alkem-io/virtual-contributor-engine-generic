@@ -41,12 +41,15 @@ COPY --from=builder /venv/lib/python3.11/site-packages /usr/lib/python3.11/dist-
 
 # Copy application code
 # We use .dockerignore to exclude unwanted files
-COPY . /app
+COPY --chown=nonroot:nonroot . /app
 
 # Environment variables for Python optimization
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/usr/lib/python3.11/dist-packages
+
+# Explicitly define the user (good practice)
+USER nonroot
 
 # Run main.py when the container launches
 ENTRYPOINT ["python3", "main.py"]
