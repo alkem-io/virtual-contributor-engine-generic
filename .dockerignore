@@ -1,0 +1,10 @@
+.git
+.venv
+__pycache__
+*.pyc
+.env
+.env.local
+.DS_Store
+manifests
+docker-compose.yaml
+Dockerfile
