@@ -1,47 +1,52 @@
-# Stage 1: Builder
-# Use a slim image for building to ensure we have necessary build tools
-FROM python:3.11-slim-bookworm AS builder
+# Stage 1: Build stage - install dependencies using Debian Python for distroless compatibility
+FROM debian:bookworm-slim AS builder
 
-# Install git (required for git dependencies in pyproject.toml)
+# Install Python, pip, git and build essentials in a single layer
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        git \
+        ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Poetry
-# We install poetry in the builder stage only
-RUN pip install poetry && poetry self add poetry-plugin-export
+# Create virtual environment using Debian's Python (compatible with distroless)
+RUN python3 -m venv /venv
+ENV PATH="/venv/bin:$PATH"
 
-# Copy only the files needed for dependency installation first
-COPY pyproject.toml poetry.lock ./
+# Install Poetry in the virtual environment
+RUN pip install --no-cache-dir poetry
 
-# Export dependencies to requirements.txt
-# This resolves the dependency tree and creates a standard requirements file
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
+# Configure Poetry to install into the existing venv
+ENV POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_NO_INTERACTION=1
 
-# Install dependencies into a specific directory
-# --target allows us to install packages into a specific folder that we can copy later
-RUN pip install --no-cache-dir --target /app/site-packages -r requirements.txt
+# Copy only dependency files first (better layer caching)
+COPY pyproject.toml poetry.lock* ./
 
-# Stage 2: Runtime
-# Use distroless image for the final stage to minimize size and attack surface
-# gcr.io/distroless/python3-debian12 contains Python 3.11
-FROM gcr.io/distroless/python3-debian12
+# Install dependencies (without dev dependencies)
+RUN poetry install --only main --no-root --no-ansi
+
+# Stage 2: Runtime stage - Google distroless Python image
+FROM gcr.io/distroless/python3-debian12:nonroot
 
 WORKDIR /app
 
-# Copy installed dependencies from the builder stage
-# We place them in the standard site-packages location for Python 3.11
-COPY --from=builder /app/site-packages /usr/local/lib/python3.11/site-packages
+# Copy virtual environment site-packages from builder
+# We copy to dist-packages which is on the default python path in Debian/Distroless
+COPY --from=builder /venv/lib/python3.11/site-packages /usr/lib/python3.11/dist-packages
 
-# Copy the application code
-# Note: .dockerignore ensures we don't copy unnecessary files like .git, .venv, etc.
+# Copy application code
+# We use .dockerignore to exclude unwanted files
 COPY . /app
 
-# Set PYTHONPATH to include the installed packages
-ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages
+# Environment variables for Python optimization
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/usr/lib/python3.11/dist-packages
 
-# Run the application
-# Distroless images do not have a shell, so we must use the exec form (JSON array)
-CMD ["main.py"]
+# Run main.py when the container launches
+ENTRYPOINT ["python3", "main.py"]
