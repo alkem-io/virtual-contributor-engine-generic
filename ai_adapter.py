@@ -1,5 +1,5 @@
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from alkemio_virtual_contributor_engine.setup_logger import setup_logger
 from alkemio_virtual_contributor_engine.events.input import Input

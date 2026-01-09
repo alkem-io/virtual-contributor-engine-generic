@@ -1,7 +1,10 @@
-# Stage 1: Build stage - install dependencies using Debian Python for distroless compatibility
+# Stage 1: Build stage (Debian Python for distroless compatibility)
 FROM debian:bookworm-slim AS builder
 
-# Install Python, pip, git and build essentials in a single layer
+# Notes:
+# - Distroless Python uses Debian 12 (bookworm). Building deps on bookworm keeps ABI compatibility.
+# - Debian enforces PEP 668 for system pip; install Poetry into an isolated venv to avoid it.
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         python3 \
@@ -13,43 +16,39 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Create virtual environment using Debian's Python (compatible with distroless)
-RUN python3 -m venv /venv
-ENV PATH="/venv/bin:$PATH"
-
-# Install Poetry in the virtual environment
-RUN pip install --no-cache-dir poetry
-
-# Configure Poetry to install into the existing venv
-ENV POETRY_VIRTUALENVS_CREATE=false \
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
     POETRY_NO_INTERACTION=1
+
+# Install Poetry into an isolated venv (builder-only)
+RUN python3 -m venv /poetry-venv && \
+    /poetry-venv/bin/pip install --no-cache-dir poetry==1.8.5
 
 # Copy only dependency files first (better layer caching)
 COPY pyproject.toml poetry.lock* ./
 
-# Install dependencies (without dev dependencies)
-RUN poetry install --only main --no-root --no-ansi
+# Ensure the lock metadata matches the builder Python (3.11) so exported markers are correct
+RUN /poetry-venv/bin/poetry lock --no-update
+
+# Export only runtime dependencies and install into a dedicated dir
+RUN /poetry-venv/bin/poetry export --format requirements.txt --output requirements.txt --without-hashes --only main && \
+    python3 -m pip install --no-cache-dir --target=/opt/python -r requirements.txt
+
+# Copy only runtime application files
+COPY ai_adapter.py config.py main.py models.py prompts.py ./
 
 # Stage 2: Runtime stage - Google distroless Python image
 FROM gcr.io/distroless/python3-debian12:nonroot
 
 WORKDIR /app
 
-# Copy virtual environment site-packages from builder
-# We copy to dist-packages which is on the default python path in Debian/Distroless
-COPY --from=builder /venv/lib/python3.11/site-packages /usr/lib/python3.11/dist-packages
+COPY --from=builder --chown=nonroot:nonroot /opt/python /opt/python
+COPY --from=builder --chown=nonroot:nonroot /app /app
 
-# Copy application code
-# We use .dockerignore to exclude unwanted files
-COPY --chown=nonroot:nonroot . /app
-
-# Environment variables for Python optimization
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/usr/lib/python3.11/dist-packages
+    PYTHONPATH=/opt/python
 
-# Explicitly define the user (good practice)
 USER nonroot
 
-# Run main.py when the container launches
 ENTRYPOINT ["python3", "main.py"]
