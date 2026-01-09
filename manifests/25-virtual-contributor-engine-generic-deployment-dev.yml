@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: alkemio-virtual-contributor-engine-generic
-          image: alkemio.azurecr.io/alkemio-virtual-contributor-engine-generic:latest
+          image: rg.nl-ams.scw.cloud/alkemio/alkemio-virtual-contributor-engine-generic:latest
           env:
             - name: RABBITMQ_HOST
               valueFrom:
