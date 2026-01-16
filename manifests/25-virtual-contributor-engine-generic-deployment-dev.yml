@@ -16,9 +16,35 @@ spec:
       labels:
         app: alkemio-virtual-contributor-engine-generic
     spec:
+    # The dependency writes warnings/errors to os.path.join(env.local_path, "app.log").
+    # In your manifest you mount a PVC at /app/data and set LOCAL_PATH from config,
+    # so it tries to write /app/data/app.log. With distroless :nonroot (UID/GID 65532),
+    # the PVC is coming in as root-owned, so you get PermissionError.
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /app/data && chown -R 65532:65532 /app/data"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: virtual-contributor-engine-generic-persistent-storage
+              mountPath: /app/data
       containers:
         - name: alkemio-virtual-contributor-engine-generic
           image: rg.nl-ams.scw.cloud/alkemio/alkemio-virtual-contributor-engine-generic:latest
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: RABBITMQ_HOST
               valueFrom:

@@ -1,22 +1,54 @@
-# Use an official Python runtime as a parent image
-ARG PYTHON_VERSION=3.11
-FROM python:${PYTHON_VERSION}-slim-bullseye AS builder
+# Stage 1: Build stage (Debian Python for distroless compatibility)
+FROM debian:bookworm-slim AS builder
 
-# install git for AlkemioVirtualContributorEngine package
-RUN apt-get update 
-RUN apt-get install git -y
+# Notes:
+# - Distroless Python uses Debian 12 (bookworm). Building deps on bookworm keeps ABI compatibility.
+# - Debian enforces PEP 668 for system pip; install Poetry into an isolated venv to avoid it.
 
-# Set the working directory in the container to /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        git \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install Poetry
-RUN pip install poetry
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    POETRY_NO_INTERACTION=1
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Install Poetry into an isolated venv (builder-only)
+RUN python3 -m venv /poetry-venv && \
+    /poetry-venv/bin/pip install --no-cache-dir poetry==1.8.5
 
-# Use Poetry to install dependencies
-RUN poetry config virtualenvs.create true && poetry install --no-interaction --no-ansi
+# Copy only dependency files first (better layer caching)
+COPY pyproject.toml poetry.lock* ./
 
-# Run guidance_engine.py when the container launches
-CMD ["poetry", "run", "python", "main.py"]
+# Ensure the lock metadata matches the builder Python (3.11) so exported markers are correct
+RUN /poetry-venv/bin/poetry lock --no-update
+
+# Export only runtime dependencies and install into a dedicated dir
+RUN /poetry-venv/bin/poetry export --format requirements.txt --output requirements.txt --without-hashes --only main && \
+    python3 -m pip install --no-cache-dir --target=/opt/python -r requirements.txt
+
+# Copy only runtime application files
+COPY ai_adapter.py config.py main.py models.py prompts.py ./
+
+# Stage 2: Runtime stage - Google distroless Python image
+FROM gcr.io/distroless/python3-debian12:nonroot
+
+WORKDIR /app
+
+COPY --from=builder --chown=nonroot:nonroot /opt/python /opt/python
+COPY --from=builder --chown=nonroot:nonroot /app /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/opt/python
+
+USER nonroot
+
+ENTRYPOINT ["python3", "main.py"]
