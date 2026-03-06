@@ -26,11 +26,9 @@ async def invoke(input: Input) -> Response:
         logger.exception(inst)
         result = f"{input.display_name} - the Alkemio's VirtualContributor is currently unavailable."
         return Response(
-            {
-                "result": result,
-                "original_result": result,
-                "sources": [],
-            }
+            result=result,
+            original_result=result,
+            sources=[]
         )
 
 
@@ -38,12 +36,12 @@ async def invoke(input: Input) -> Response:
 # translating the question to the data _base language_ should be a separate call
 # so the translation could be used for embeddings retrieval
 async def query_chain(input: Input) -> Response:
-    model = get_model(input.engine, input.external_config["apiKey"])
+    model = get_model(input.engine, input.external_config.api_key)
     question = input.message
 
     # # use the last N message from the history except the last one
     # # as it is the question we are answering now
-    history = input.history[(env.history_length + 1) * -1 : -1]
+    history = input.history[(env.history_length + 1) * -1: -1]
 
     # if we have history try to add context from it into the last question
     # - who is Maxima?
@@ -67,10 +65,11 @@ async def query_chain(input: Input) -> Response:
 
     messages = []
 
-    for system_message in input.prompt:
-        messages.append(SystemMessage(content=system_message))
+    if 'prompt' in input and input.prompt is not None:
+        for system_message in input.prompt:
+            messages.append(SystemMessage(content=system_message))
 
     messages.append(HumanMessage(content=question))
 
     response = model.invoke(messages)
-    return Response({"result": response.content})
+    return Response(result=response.content)
