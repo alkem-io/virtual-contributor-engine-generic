@@ -1,15 +1,8 @@
-# Stage 1: Build stage (Debian Python for distroless compatibility)
-FROM debian:bookworm-slim AS builder
-
-# Notes:
-# - Distroless Python uses Debian 12 (bookworm). Building deps on bookworm keeps ABI compatibility.
-# - Debian enforces PEP 668 for system pip; install Poetry into an isolated venv to avoid it.
+# Stage 1: Build stage - Python 3.12 (required by pyproject.toml)
+FROM python:3.12-slim-bookworm AS builder
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv \
         git \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
@@ -27,9 +20,6 @@ RUN python3 -m venv /poetry-venv && \
 # Copy only dependency files first (better layer caching)
 COPY pyproject.toml poetry.lock* ./
 
-# Ensure the lock metadata matches the builder Python (3.11) so exported markers are correct
-RUN /poetry-venv/bin/poetry lock --no-update
-
 # Export only runtime dependencies and install into a dedicated dir
 RUN /poetry-venv/bin/poetry export --format requirements.txt --output requirements.txt --without-hashes --only main && \
     python3 -m pip install --no-cache-dir --target=/opt/python -r requirements.txt
@@ -37,18 +27,19 @@ RUN /poetry-venv/bin/poetry export --format requirements.txt --output requiremen
 # Copy only runtime application files
 COPY ai_adapter.py config.py main.py models.py prompts.py ./
 
-# Stage 2: Runtime stage - Google distroless Python image
-FROM gcr.io/distroless/python3-debian12:nonroot
+# Stage 2: Runtime stage
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-COPY --from=builder --chown=nonroot:nonroot /opt/python /opt/python
-COPY --from=builder --chown=nonroot:nonroot /app /app
+COPY --from=builder /opt/python /opt/python
+COPY --from=builder /app /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/opt/python
 
-USER nonroot
+RUN useradd --create-home --uid 1000 appuser
+USER appuser
 
 ENTRYPOINT ["python3", "main.py"]

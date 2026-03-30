@@ -1,6 +1,15 @@
 .DS_Store
 .env
 __pycache__
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
 app.log
 vectordb
 ingestion_output.txt
